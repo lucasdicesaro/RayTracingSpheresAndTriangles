@@ -81,6 +81,8 @@ public class RayTracingManager : MonoBehaviour
 
     List<Triangle> cachedTriangles = new List<Triangle>(1024);
     List<MeshInfo> cachedMeshInfos = new List<MeshInfo>(64);
+    RayTracedSphere[] cachedSphereComponents;
+    RayTracedMesh[] cachedMeshObjects;
     // Start is called once before the first execution of Update after the MonoBehaviour is created
     void Start()
     {
@@ -112,11 +114,6 @@ public class RayTracingManager : MonoBehaviour
             // Do NOT release accumA/accumB here, so accumulation continues smoothly
         }
         wasStopUploading = stopUploading;
-
-        if (!wasStopUploading && stopUploading)
-        {
-            savedFrameIndex = frameIndex;
-        }
     }
 
     // Called after each camera (e.g. game or scene camera) has finished rendering into the src texture
@@ -172,7 +169,8 @@ public class RayTracingManager : MonoBehaviour
             var desc = src.descriptor;
             desc.depthBufferBits = 0;
             desc.msaaSamples = 1;
-            desc.sRGB = false; // accumulate in linear space
+            desc.sRGB = false;
+            desc.colorFormat = RenderTextureFormat.ARGBFloat;
             if (accumA == null || accumA.width != src.width || accumA.height != src.height)
             {
                 if (accumA) { accumA.Release(); accumA = null; }
@@ -187,14 +185,10 @@ public class RayTracingManager : MonoBehaviour
             Graphics.Blit(null, currentRT, rayTracingMaterial);
 
             // Set frame count and explicitly bind Comparison shader inputs
-            int previousCount = Mathf.Max(0, frameIndex - 1);
+            int previousCount = Mathf.Clamp(frameIndex - 1, 0, 65535);
             comparisonMaterial.SetInt("NumRenderedFrames", previousCount);
             comparisonMaterial.SetTexture("_MainTex", currentRT);    // new render
             comparisonMaterial.SetTexture("_MainTexOld", accumB);
-            if (!stopUploading)
-                comparisonMaterial.SetTexture("_MainTexOld", accumB);
-            else
-                comparisonMaterial.SetTexture("_MainTexOld", currentRT);
 
             // Blend into write target
             Graphics.Blit(null, accumA, comparisonMaterial);
@@ -221,8 +215,9 @@ public class RayTracingManager : MonoBehaviour
 
     void SendSphereParams()
     {
-        // Gather spheres in the scene (world space)
-        var sphereComponents = Object.FindObjectsByType<RayTracedSphere>(FindObjectsSortMode.None);
+        if (cachedSphereComponents == null || !Application.isPlaying)
+            cachedSphereComponents = Object.FindObjectsByType<RayTracedSphere>(FindObjectsSortMode.None);
+        var sphereComponents = cachedSphereComponents;
 
         int count = sphereComponents.Length;
         var data = new Sphere[Mathf.Max(1, count)];
@@ -308,7 +303,9 @@ public class RayTracingManager : MonoBehaviour
         cachedTriangles.Clear();
         cachedMeshInfos.Clear();
 
-        var meshObjects = Object.FindObjectsByType<RayTracedMesh>(FindObjectsSortMode.None);
+        if (cachedMeshObjects == null || !Application.isPlaying)
+            cachedMeshObjects = Object.FindObjectsByType<RayTracedMesh>(FindObjectsSortMode.None);
+        var meshObjects = cachedMeshObjects;
         for (int i = 0; i < meshObjects.Length; i++)
         {
             var rt = meshObjects[i];
@@ -446,7 +443,9 @@ public class RayTracingManager : MonoBehaviour
             accumB = null;
         }
 
-        sphereBuffer?.Release(); 
+        cachedSphereComponents = null;
+        cachedMeshObjects = null;
+        sphereBuffer?.Release();
         sphereBuffer = null;
         trianglesBuffer?.Release();
         trianglesBuffer = null;

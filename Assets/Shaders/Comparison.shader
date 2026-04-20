@@ -39,7 +39,7 @@ Shader "Custom/Comparison"
             sampler2D _MainTexOld;  // previous accumulated render
             int NumRenderedFrames;  // frame counter
 
-            fixed4 frag(v2f i) : SV_Target
+            float4 frag(v2f i) : SV_Target
             {
                 float4 oldRender = tex2D(_MainTexOld, i.uv);
                 float4 newRender = tex2D(_MainTex, i.uv);

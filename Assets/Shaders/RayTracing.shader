@@ -146,17 +146,17 @@ Shader "Custom/RayTracing"
                 float3 dao = cross(ao, ray.dir);
                 
                 float determinant = -dot(ray.dir, normalVector);
+                HitInfo hitInfo = (HitInfo)0;
+                if (determinant < 1E-6) return hitInfo;
                 float invDet = 1 / determinant;
-                
-                // Calculate dst to triangle & barycentric coordinated of intersection point
+
+                // Calculate dst to triangle & barycentric coordinates of intersection point
                 float dst = dot(ao, normalVector) * invDet;
                 float u = dot(edgeAC, dao) * invDet;
                 float v = -dot(edgeAB, dao) * invDet;
                 float w = 1 - u - v;
-                
-                // Initialize hit info
-                HitInfo hitInfo;
-                hitInfo.didHit = determinant >= 1E-6 && dst >= 0 && u >= 0 && v >= 0 && w >= 0;
+
+                hitInfo.didHit = dst >= 0 && u >= 0 && v >= 0 && w >= 0;
                 hitInfo.hitPoint = ray.origin + ray.dir * dst;
                 hitInfo.normal = normalize(tri.normalA * w + tri.normalB * u + tri.normalC * v);
                 hitInfo.dst = dst;
@@ -226,7 +226,7 @@ Shader "Custom/RayTracing"
             {
                 // Thanks to https://stackoverflow.com/a/6178290
                 float theta = 2 * 3.14159265 * RandomValue(state);
-                float rho = sqrt(-2.0 * log(RandomValue(state)));
+                float rho = sqrt(-2.0 * log(max(RandomValue(state), 1e-10)));
                 return rho * cos(theta);
             }
 
@@ -273,7 +273,8 @@ Shader "Custom/RayTracing"
                         RayTracingMaterial material = hitInfo.material;
                         bool isSpecularBounce = material.specularProbability >= RandomValue(rngState);
                         //float3 diffuseDir = RandomHemisphereDirection(hitInfo.normal, rngState);
-                        float3 diffuseDir = normalize(hitInfo.normal + RandomDirection(rngState));
+                        float3 diffuseSum = hitInfo.normal + RandomDirection(rngState);
+                        float3 diffuseDir = dot(diffuseSum, diffuseSum) < 1e-6 ? hitInfo.normal : normalize(diffuseSum);
                         float3 specularDir = reflect(ray.dir, hitInfo.normal);
                         ray.dir = normalize(lerp(diffuseDir, specularDir, material.smoothness * isSpecularBounce));
 
@@ -300,7 +301,7 @@ Shader "Custom/RayTracing"
             }
 
             // Run for every pixel in the display
-            fixed4 frag(v2f bounceIndex) : SV_Target
+            float4 frag(v2f bounceIndex) : SV_Target
             {
                 // Create a seed for random number generator
                 uint2 numPixels = _ScreenParams.xy;
