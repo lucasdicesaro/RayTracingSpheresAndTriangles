@@ -22,7 +22,7 @@ This project uses Unity's **Built-in renderer** — URP is intentionally disable
 
 1. Clone the repo
 2. Open **Unity Hub** → **Add project from disk** → select the repo root folder
-3. Open the scene from `Assets/Scenes/`
+3. In the Project panel, double-click `Assets/Scenes/SampleScene.unity` ← required on first open; Unity remembers it after that
 4. Press Play
 
 No manual setup needed — scene, parameters, and project settings are all committed.
