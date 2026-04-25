@@ -14,6 +14,10 @@ An extended ray tracing renderer built in Unity using compute shaders, based on 
 - Unity 2022.3 or later
 - GPU with compute shader support (DirectX 11 / Metal)
 
+## Rendering pipeline note
+
+This project uses Unity's **Built-in renderer** — URP is intentionally disabled in `Project Settings → Graphics`. Compute shader ray tracing requires the camera image effect pipeline, which doesn't work with URP active. This is already committed in `ProjectSettings/`, so no manual change is needed after cloning.
+
 ## How to open
 
 1. Clone the repo
@@ -21,7 +25,7 @@ An extended ray tracing renderer built in Unity using compute shaders, based on 
 3. Open the scene from `Assets/Scenes/`
 4. Press Play
 
-No manual setup needed — the scene file already has all parameters and shader assignments saved.
+No manual setup needed — scene, parameters, and project settings are all committed.
 
 ## References
 
