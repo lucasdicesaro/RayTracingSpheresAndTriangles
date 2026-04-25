@@ -5,8 +5,8 @@ using UnityEngine;
 public class ProceduralCheckerboard : MonoBehaviour
 {
     [Header("Texture Size")]
-    [Min(2)] public int width = 512;
-    [Min(2)] public int height = 512;
+    [Min(2)] public int width = 256;
+    [Min(2)] public int height = 256;
 
     [Header("Pattern")]
     [Min(1)] public int tileSize = 32;

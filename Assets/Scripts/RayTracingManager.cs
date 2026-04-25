@@ -8,19 +8,19 @@ using UnityEditor;
 public class RayTracingManager : MonoBehaviour
 {
     [Header("Ray Tracing Settings")]
-    [SerializeField, Min(0)] int MaxBounceCount = 1;
-    [SerializeField, Min(1)] int NumRaysPerPixel = 1;
-    [SerializeField, Min(0)] float DefocusStrength = 0f;
-    [SerializeField, Min(0)] float DivergeStrength = 0f;
-    [SerializeField, Min(0), InspectorName("Focus Distance")] float FocusDistance = 1f;
+    [SerializeField, Min(0)] int MaxBounceCount = 10;
+    [SerializeField, Min(1)] int NumRaysPerPixel = 3;
+    [SerializeField, Min(0)] float DefocusStrength = 100f;
+    [SerializeField, Min(0)] float DivergeStrength = 0.2f;
+    [SerializeField, Min(0), InspectorName("Focus Distance")] float FocusDistance = 3.5f;
     [SerializeField] bool Accumulate = true;
     [SerializeField, InspectorName("Update In Edit Mode")] bool updateInEditMode = false;
-    [SerializeField, InspectorName("Stop Uploading")] bool stopUploading = false; // <--- Add this line
+    [SerializeField, InspectorName("Stop Uploading")] bool stopUploading = false;
     [SerializeField, Min(0), InspectorName("Num Rendered Frames")] int frameIndex;
 
     [Header("View Settings")]
     [SerializeField, InspectorName("Use Shader in Scene View")] bool useShaderInSceneView;
-    [SerializeField, InspectorName("Show Focus Plane")] bool showFocusPlane = false;
+    [SerializeField, InspectorName("Show Focus Plane")] bool showFocusPlane = true;
 
     [Header("References")]
     [SerializeField] Shader rayTracingShader;
@@ -382,7 +382,7 @@ public class RayTracingManager : MonoBehaviour
     }
 
     [Header("Environment Settings")]
-    [SerializeField, InspectorName("Enabled")] bool enableEnvironmentLight = true;
+    [SerializeField, InspectorName("Enabled")] bool enableEnvironmentLight = false;
 
     [SerializeField, Tooltip("Directional Light used for the sun. Leave empty to use RenderSettings.sun or the first Directional Light.")]
     Light sunLight;
