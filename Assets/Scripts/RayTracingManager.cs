@@ -180,8 +180,11 @@ public class RayTracingManager : MonoBehaviour
                 frameIndex = 0;
             }
 
-            // Render current frame
-            var currentRT = RenderTexture.GetTemporary(src.descriptor);
+            // Render current frame into a float RT to avoid clamping HDR values
+            var rtDesc = src.descriptor;
+            rtDesc.colorFormat = RenderTextureFormat.ARGBFloat;
+            rtDesc.sRGB = false;
+            var currentRT = RenderTexture.GetTemporary(rtDesc);
             Graphics.Blit(null, currentRT, rayTracingMaterial);
 
             // Set frame count and explicitly bind Comparison shader inputs
