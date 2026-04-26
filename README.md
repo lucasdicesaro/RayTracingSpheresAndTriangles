@@ -8,6 +8,7 @@ An extended ray tracing renderer built in Unity using compute shaders, based on 
 - Supports spheres and triangle meshes
 - Progressive rendering — accumulates samples over frames for anti-aliasing
 - Procedural checkerboard material support
+- Two independent scenes: **CornellBox** and **Chess**
 
 ## Requirements
 
@@ -22,7 +23,7 @@ This project uses Unity's **Built-in renderer** — URP is intentionally disable
 
 1. Clone the repo
 2. Open **Unity Hub** → **Add project from disk** → select the repo root folder
-3. In the Project panel, double-click `Assets/Scenes/SampleScene.unity` ← required on first open; Unity remembers it after that
+3. In the Project panel, open `Assets/Scenes/CornellBox.unity` or `Assets/Scenes/Chess.unity`
 4. Press Play
 
 No manual setup needed — scene, parameters, and project settings are all committed.
