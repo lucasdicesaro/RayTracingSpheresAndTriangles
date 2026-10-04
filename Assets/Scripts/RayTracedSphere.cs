@@ -3,7 +3,7 @@ using UnityEngine;
 public class RayTracedSphere : MonoBehaviour
 {
     [Header("Material")]
-    [ColorUsage(true, true)] public Color color = Color.white;
+    public Color color = Color.white;
     [ColorUsage(true, true)] public Color emissionColor = Color.black;
     [Range(0f, 50f)] public float emissionStrength = 0f;
 
@@ -11,7 +11,8 @@ public class RayTracedSphere : MonoBehaviour
 
     // New specular controls
     [Range(0f, 1f)] public float specularProbability = 0f;
-    [ColorUsage(false, true)] public Color specularColor = Color.white;
+    [ColorUsage(false)] public Color specularColor = Color.white;
+    public RayTracedMesh.MaterialFlag flag;
 
     // Accessors used by the manager
     public Color Color => color;
@@ -20,4 +21,5 @@ public class RayTracedSphere : MonoBehaviour
     public float Smoothness => smoothness;
     public float SpecularProbability => specularProbability;
     public Color SpecularColor => specularColor;
+    public RayTracedMesh.MaterialFlag Flag => flag;
 }

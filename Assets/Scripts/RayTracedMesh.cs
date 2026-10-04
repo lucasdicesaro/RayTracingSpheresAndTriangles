@@ -2,10 +2,12 @@ using UnityEngine;
 
 public class RayTracedMesh : MonoBehaviour
 {
+    public enum MaterialFlag { None, CheckerPattern }
+
     [System.Serializable]
     public struct MaterialElement
     {
-        [ColorUsage(true, true)] public Color color;
+        public Color color;                               // albedo, LDR so bounces can't gain energy
         [ColorUsage(true, true)] public Color emissionColor;
         [Range(0f, 50f)] public float emissionStrength;
 
@@ -13,7 +15,8 @@ public class RayTracedMesh : MonoBehaviour
 
         // New specular controls
         [Range(0f, 1f)] public float specularProbability; // set to 1 for mirror-like
-        [ColorUsage(false, true)] public Color specularColor;
+        [ColorUsage(false)] public Color specularColor;
+        public MaterialFlag flag;                         // CheckerPattern alternates color / emissionColor in 1-unit world tiles
     }
 
     [Header("Materials")]

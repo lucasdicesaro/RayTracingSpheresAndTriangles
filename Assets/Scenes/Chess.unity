@@ -1864,6 +1864,7 @@ MonoBehaviour:
     smoothness: 1
     specularProbability: 0.199
     specularColor: {r: 1, g: 1, b: 1, a: 0}
+    flag: 1
   meshRenderer: {fileID: 2088808495}
   meshFilter: {fileID: 2088808496}
   triangleCount: 2

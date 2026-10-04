@@ -38,6 +38,9 @@ public class RayTracingManager : MonoBehaviour
 
     private bool wasStopUploading = false;
     private int savedFrameIndex = 0;
+    int lastSceneHash;    // everything that affects the image; accumulation resets when it changes
+    int lastGeometryHash; // meshes + transforms + materials; triangles are rebuilt only when it changes
+    Light cachedSun;      // directional light found when no sun is assigned
 
     [StructLayout(LayoutKind.Sequential)]
     struct RayTracingMaterial
@@ -48,6 +51,7 @@ public class RayTracingManager : MonoBehaviour
         public float smoothness;        // 0..1
         public float specularProbability; // 0..1
         public Vector3 specularColor;     // RGB
+        public int flag;                  // RayTracedMesh.MaterialFlag
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -141,16 +145,24 @@ public class RayTracingManager : MonoBehaviour
                 return;
             }
 
-            // Only create/use comparison material when accumulating
-            if (Accumulate && comparisonMaterial == null && comparisonShader != null)
+            // Accumulate only if the comparison shader is available; otherwise fall back to a plain render
+            bool accumulate = Accumulate;
+            if (accumulate)
             {
                 ShaderHelper.InitMaterial(comparisonShader, ref comparisonMaterial);
+                accumulate = comparisonMaterial != null;
             }
 
             UpdateCameraParams(cam);
-            SendSphereParams();
-            SendTriangleParams();
+            int sphereHash = SendSphereParams();
+            int geometryHash = SendTriangleParams();
             SendEnvironmentParams();
+
+            // Restart accumulation when anything that affects the image changes
+            int sceneHash = System.HashCode.Combine(sphereHash, geometryHash, cam.transform.localToWorldMatrix,
+                MaxBounceCount, NumRaysPerPixel, DefocusStrength, DivergeStrength, FocusDistance);
+            sceneHash = System.HashCode.Combine(sceneHash, enableEnvironmentLight, sunFocus, sunIntensityScale);
+            if (sceneHash != lastSceneHash) { lastSceneHash = sceneHash; frameIndex = 0; }
 
             rayTracingMaterial.SetInt("MaxBounceCount", MaxBounceCount);
             rayTracingMaterial.SetInt("NumRaysPerPixel", NumRaysPerPixel);
@@ -159,7 +171,7 @@ public class RayTracingManager : MonoBehaviour
             rayTracingMaterial.SetFloat("FocusDistance", FocusDistance);
             rayTracingMaterial.SetInt("Frame", frameIndex);
 
-            if (!Accumulate)
+            if (!accumulate)
             {
                 Graphics.Blit(null, target, rayTracingMaterial);
                 return;
@@ -216,13 +228,15 @@ public class RayTracingManager : MonoBehaviour
         rayTracingMaterial.SetMatrix("CamLocalToWorldMatrix", cam.transform.localToWorldMatrix);
     }
 
-    void SendSphereParams()
+    // Returns a hash of the sphere data so callers can detect scene changes
+    int SendSphereParams()
     {
         if (cachedSphereComponents == null || !Application.isPlaying)
             cachedSphereComponents = Object.FindObjectsByType<RayTracedSphere>(FindObjectsSortMode.None);
         var sphereComponents = cachedSphereComponents;
 
         int count = sphereComponents.Length;
+        int hash = count;
         var data = new Sphere[Mathf.Max(1, count)];
         for (int i = 0; i < count; i++)
         {
@@ -244,13 +258,15 @@ public class RayTracingManager : MonoBehaviour
                     emissionStrength = s.EmissionStrength,
                     smoothness = s.Smoothness,
                     specularProbability = s.SpecularProbability,
-                    specularColor = new Vector3(s.SpecularColor.r, s.SpecularColor.g, s.SpecularColor.b)
+                    specularColor = new Vector3(s.SpecularColor.r, s.SpecularColor.g, s.SpecularColor.b),
+                    flag = (int)s.Flag
                 }
             };
+            hash = System.HashCode.Combine(hash, t.position, radius, Hash(data[i].material));
         }
 
         // Allocate/resize buffer
-        int sphereStride = sizeof(float) * (3 + 1 + (4 + 3 + 1 + 1 + 1 + 3)); // pos(3)+radius(1)+material(13 floats)
+        int sphereStride = sizeof(float) * (3 + 1 + (4 + 3 + 1 + 1 + 1 + 3 + 1)); // pos(3)+radius(1)+material(14 floats incl. flag)
         if (sphereBuffer == null || sphereBuffer.count != Mathf.Max(1, count))
         {
             sphereBuffer?.Release();
@@ -264,41 +280,65 @@ public class RayTracingManager : MonoBehaviour
         // Bind
         rayTracingMaterial.SetInt("NumSpheres", count);
         rayTracingMaterial.SetBuffer("Spheres", sphereBuffer);
+        return hash;
     }
 
-    void SendTriangleParams()
+    static int Hash(in RayTracingMaterial m) =>
+        System.HashCode.Combine(m.color, m.emissionColor, m.emissionStrength, m.smoothness, m.specularProbability, m.specularColor, m.flag);
+
+    // Returns a hash of the mesh set, transforms and materials so callers can detect scene changes
+    int SendTriangleParams()
     {
-        // Build full world-space geometry (positions + normals + bounds + materials)
-        BuildSceneGeometry();
+        if (cachedMeshObjects == null || !Application.isPlaying)
+            cachedMeshObjects = Object.FindObjectsByType<RayTracedMesh>(FindObjectsSortMode.None);
 
-        int triCount = cachedTriangles.Count;
-        int triStride = sizeof(float) * 18; // pos(3*3) + normal(3*3)
-        if (trianglesBuffer == null || trianglesBuffer.count != Mathf.Max(1, triCount))
+        int hash = cachedMeshObjects.Length;
+        foreach (var rt in cachedMeshObjects)
         {
-            trianglesBuffer?.Release();
-            trianglesBuffer = new ComputeBuffer(Mathf.Max(1, triCount), triStride, ComputeBufferType.Structured);
-        }
-        if (triCount > 0)
-        {
-            trianglesBuffer.SetData(cachedTriangles);
-        }
-
-        int meshCount = cachedMeshInfos.Count;
-        // MeshInfo: uint*2 + bounds(3+3 floats) + material(4+3+1+1+1+3 floats)
-        int meshStride = sizeof(uint) * 2 + sizeof(float) * (3 + 3) + sizeof(float) * (4 + 3 + 1 + 1 + 1 + 3);
-        if (meshInfoBuffer == null || meshInfoBuffer.count != Mathf.Max(1, meshCount))
-        {
-            meshInfoBuffer?.Release();
-            meshInfoBuffer = new ComputeBuffer(Mathf.Max(1, meshCount), meshStride, ComputeBufferType.Structured);
-        }
-        if (meshCount > 0)
-        {
-            meshInfoBuffer.SetData(cachedMeshInfos);
+            var mf = rt.meshFilter;
+            if (mf == null || mf.sharedMesh == null) continue;
+            hash = System.HashCode.Combine(hash, mf.sharedMesh.GetInstanceID(), mf.transform.localToWorldMatrix);
+            if (rt.materials != null)
+                foreach (var m in rt.materials)
+                    hash = System.HashCode.Combine(hash, m.color, m.emissionColor, m.emissionStrength, m.smoothness, m.specularProbability, m.specularColor, m.flag);
         }
 
-        rayTracingMaterial.SetInt("NumMeshes", meshCount);
+        // Rebuild and upload world-space geometry only when something changed (or buffers were released)
+        if (hash != lastGeometryHash || trianglesBuffer == null || meshInfoBuffer == null)
+        {
+            lastGeometryHash = hash;
+            BuildSceneGeometry();
+
+            int triCount = cachedTriangles.Count;
+            int triStride = sizeof(float) * 18; // pos(3*3) + normal(3*3)
+            if (trianglesBuffer == null || trianglesBuffer.count != Mathf.Max(1, triCount))
+            {
+                trianglesBuffer?.Release();
+                trianglesBuffer = new ComputeBuffer(Mathf.Max(1, triCount), triStride, ComputeBufferType.Structured);
+            }
+            if (triCount > 0)
+            {
+                trianglesBuffer.SetData(cachedTriangles);
+            }
+
+            int meshCount = cachedMeshInfos.Count;
+            // MeshInfo: uint*2 + bounds(3+3 floats) + material(4+3+1+1+1+3+1 floats incl. flag)
+            int meshStride = sizeof(uint) * 2 + sizeof(float) * (3 + 3) + sizeof(float) * (4 + 3 + 1 + 1 + 1 + 3 + 1);
+            if (meshInfoBuffer == null || meshInfoBuffer.count != Mathf.Max(1, meshCount))
+            {
+                meshInfoBuffer?.Release();
+                meshInfoBuffer = new ComputeBuffer(Mathf.Max(1, meshCount), meshStride, ComputeBufferType.Structured);
+            }
+            if (meshCount > 0)
+            {
+                meshInfoBuffer.SetData(cachedMeshInfos);
+            }
+        }
+
+        rayTracingMaterial.SetInt("NumMeshes", cachedMeshInfos.Count);
         rayTracingMaterial.SetBuffer("Triangles", trianglesBuffer);
         rayTracingMaterial.SetBuffer("AllMeshInfo", meshInfoBuffer);
+        return hash;
     }
 
     void BuildSceneGeometry()
@@ -306,8 +346,6 @@ public class RayTracingManager : MonoBehaviour
         cachedTriangles.Clear();
         cachedMeshInfos.Clear();
 
-        if (cachedMeshObjects == null || !Application.isPlaying)
-            cachedMeshObjects = Object.FindObjectsByType<RayTracedMesh>(FindObjectsSortMode.None);
         var meshObjects = cachedMeshObjects;
         for (int i = 0; i < meshObjects.Length; i++)
         {
@@ -320,6 +358,10 @@ public class RayTracingManager : MonoBehaviour
             var t = mf.transform;
 
             var verts = mesh.vertices;
+            var normals = mesh.normals;
+            bool hasNormals = normals != null && normals.Length == verts.Length;
+            // Inverse-transpose so normals stay perpendicular under non-uniform scale
+            Matrix4x4 normalMatrix = t.localToWorldMatrix.inverse.transpose;
             int subMeshCount = mesh.subMeshCount;
             for (int sm = 0; sm < subMeshCount; sm++)
             {
@@ -342,12 +384,23 @@ public class RayTracingManager : MonoBehaviour
                     Vector3 w1 = t.localToWorldMatrix.MultiplyPoint3x4(verts[i1]);
                     Vector3 w2 = t.localToWorldMatrix.MultiplyPoint3x4(verts[i2]);
 
-                    Vector3 faceN = Vector3.Normalize(Vector3.Cross(w1 - w0, w2 - w0));
+                    Vector3 n0, n1, n2;
+                    if (hasNormals)
+                    {
+                        // Smooth shading from the imported vertex normals
+                        n0 = normalMatrix.MultiplyVector(normals[i0]).normalized;
+                        n1 = normalMatrix.MultiplyVector(normals[i1]).normalized;
+                        n2 = normalMatrix.MultiplyVector(normals[i2]).normalized;
+                    }
+                    else
+                    {
+                        n0 = n1 = n2 = Vector3.Normalize(Vector3.Cross(w1 - w0, w2 - w0));
+                    }
 
                     cachedTriangles.Add(new Triangle
                     {
                         posA = w0, posB = w1, posC = w2,
-                        normalA = faceN, normalB = faceN, normalC = faceN
+                        normalA = n0, normalB = n1, normalC = n2
                     });
                     triCountForSubmesh++;
 
@@ -367,8 +420,9 @@ public class RayTracingManager : MonoBehaviour
                         emissionColor = new Vector3(elem.emissionColor.r, elem.emissionColor.g, elem.emissionColor.b),
                         emissionStrength = elem.emissionStrength,
                         smoothness = elem.smoothness,
-                        specularProbability = elem.specularProbability, // now sent
-                        specularColor = new Vector3(elem.specularColor.r, elem.specularColor.g, elem.specularColor.b)
+                        specularProbability = elem.specularProbability,
+                        specularColor = new Vector3(elem.specularColor.r, elem.specularColor.g, elem.specularColor.b),
+                        flag = (int)elem.flag
                     };
 
                     cachedMeshInfos.Add(new MeshInfo
@@ -406,15 +460,14 @@ public class RayTracingManager : MonoBehaviour
         Light dirLight = sunLight != null ? sunLight : RenderSettings.sun;
         if (dirLight == null)
         {
-            var lights = Object.FindObjectsByType<Light>(FindObjectsSortMode.None);
-            for (int i = 0; i < lights.Length; i++)
-            {
-                if (lights[i].type == LightType.Directional) { dirLight = lights[i]; break; }
-            }
+            if (cachedSun == null)
+                foreach (var l in Object.FindObjectsByType<Light>(FindObjectsSortMode.None))
+                    if (l.type == LightType.Directional) { cachedSun = l; break; }
+            dirLight = cachedSun;
         }
 
-        // Use direction TOWARD the sun: -forward
-        Vector3 sunDir = dirLight != null ? (-dirLight.transform.forward) : Vector3.down;
+        // Direction the light travels (the shader negates it to get the direction toward the sun)
+        Vector3 sunDir = dirLight != null ? dirLight.transform.forward : Vector3.down;
         float sunIntensity = enableEnvironmentLight ? ((dirLight != null ? dirLight.intensity : 0f) * sunIntensityScale) : 0f;
         rayTracingMaterial.SetVector("SunLightDirection", new Vector4(sunDir.x, sunDir.y, sunDir.z, 0f));
         rayTracingMaterial.SetFloat("SunIntensity", sunIntensity);

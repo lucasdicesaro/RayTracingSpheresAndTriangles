@@ -42,6 +42,7 @@ Shader "Custom/RayTracing"
                 float smoothness;
                 float specularProbability;
                 float3 specularColor;
+                int flag; // 1 = checker pattern
             };
 
             struct HitInfo {
@@ -269,8 +270,14 @@ Shader "Custom/RayTracing"
                 for (int bounceIndex = 0; bounceIndex <= MaxBounceCount; bounceIndex++){
                     HitInfo hitInfo = CalculateRayCollision(ray);
                     if (hitInfo.didHit) {
-                        ray.origin = hitInfo.hitPoint;
+                        // Offset along the normal so the next ray doesn't re-hit the same surface
+                        ray.origin = hitInfo.hitPoint + hitInfo.normal * 0.001;
                         RayTracingMaterial material = hitInfo.material;
+                        if (material.flag == 1) {
+                            float2 c = floor(hitInfo.hitPoint.xz);
+                            bool evenTile = fmod(c.x + c.y, 2.0) == 0;
+                            material.color.rgb = evenTile ? material.color.rgb : material.emissionColor;
+                        }
                         bool isSpecularBounce = material.specularProbability >= RandomValue(rngState);
                         //float3 diffuseDir = RandomHemisphereDirection(hitInfo.normal, rngState);
                         float3 diffuseSum = hitInfo.normal + RandomDirection(rngState);
