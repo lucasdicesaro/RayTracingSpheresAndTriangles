@@ -81,6 +81,7 @@ public class RayTracingManager : MonoBehaviour
         public Vector3 boundsMin;
         public Vector3 boundsMax;
         public RayTracingMaterial material;
+        public Matrix4x4 worldToLocal;   // so surface patterns follow the object instead of world axes
     }
 
     List<Triangle> cachedTriangles = new List<Triangle>(1024);
@@ -322,8 +323,8 @@ public class RayTracingManager : MonoBehaviour
             }
 
             int meshCount = cachedMeshInfos.Count;
-            // MeshInfo: uint*2 + bounds(3+3 floats) + material(4+3+1+1+1+3+1 floats incl. flag)
-            int meshStride = sizeof(uint) * 2 + sizeof(float) * (3 + 3) + sizeof(float) * (4 + 3 + 1 + 1 + 1 + 3 + 1);
+            // MeshInfo: uint*2 + bounds(3+3 floats) + material(4+3+1+1+1+3+1 floats incl. flag) + worldToLocal(16 floats)
+            int meshStride = sizeof(uint) * 2 + sizeof(float) * (3 + 3) + sizeof(float) * (4 + 3 + 1 + 1 + 1 + 3 + 1) + sizeof(float) * 16;
             if (meshInfoBuffer == null || meshInfoBuffer.count != Mathf.Max(1, meshCount))
             {
                 meshInfoBuffer?.Release();
@@ -431,7 +432,8 @@ public class RayTracingManager : MonoBehaviour
                         numTriangles = (uint)triCountForSubmesh,
                         boundsMin = bmin,
                         boundsMax = bmax,
-                        material = mat
+                        material = mat,
+                        worldToLocal = t.worldToLocalMatrix
                     });
                 }
             }

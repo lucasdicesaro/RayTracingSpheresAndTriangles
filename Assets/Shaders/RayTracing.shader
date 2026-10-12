@@ -70,6 +70,7 @@ Shader "Custom/RayTracing"
                 float3 boundsMin;
                 float3 boundsMax;
                 RayTracingMaterial material;
+                float4x4 worldToLocal;
             };
 
             struct Environment {
@@ -196,6 +197,13 @@ Shader "Custom/RayTracing"
                         if (hitInfo.didHit && hitInfo.dst < closestHit.dst) {
                             closestHit = hitInfo;
                             closestHit.material = meshInfo.material;
+                            if (meshInfo.material.flag == 1) {
+                                // Checker in the mesh's local space so the tiles follow the board's rotation and position
+                                // ponytail: assumes a Unity Quad (1 unit, XY plane) split into 8x8 tiles
+                                float2 c = floor((mul(meshInfo.worldToLocal, float4(hitInfo.hitPoint, 1)).xy + 0.5) * 8);
+                                if (fmod(c.x + c.y, 2.0) != 0)
+                                    closestHit.material.color.rgb = meshInfo.material.emissionColor;
+                            }
                         }
                     }
                 }
@@ -273,11 +281,6 @@ Shader "Custom/RayTracing"
                         // Offset along the normal so the next ray doesn't re-hit the same surface
                         ray.origin = hitInfo.hitPoint + hitInfo.normal * 0.001;
                         RayTracingMaterial material = hitInfo.material;
-                        if (material.flag == 1) {
-                            float2 c = floor(hitInfo.hitPoint.xz);
-                            bool evenTile = fmod(c.x + c.y, 2.0) == 0;
-                            material.color.rgb = evenTile ? material.color.rgb : material.emissionColor;
-                        }
                         bool isSpecularBounce = material.specularProbability >= RandomValue(rngState);
                         //float3 diffuseDir = RandomHemisphereDirection(hitInfo.normal, rngState);
                         float3 diffuseSum = hitInfo.normal + RandomDirection(rngState);
