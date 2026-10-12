@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.InputSystem;
 using System.Runtime.InteropServices;
 using System.Collections.Generic;
 #if UNITY_EDITOR
@@ -15,7 +16,7 @@ public class RayTracingManager : MonoBehaviour
     [SerializeField, Min(0), InspectorName("Focus Distance")] float FocusDistance = 3.5f;
     [SerializeField] bool Accumulate = true;
     [SerializeField, InspectorName("Update In Edit Mode")] bool updateInEditMode = false;
-    [SerializeField, InspectorName("Stop Uploading")] bool stopUploading = false;
+    [SerializeField, InspectorName("Paused")] bool paused = false; // Space toggles, Right arrow steps one frame, R restarts accumulation
     [SerializeField, Min(0), InspectorName("Num Rendered Frames")] int frameIndex;
 
     [Header("View Settings")]
@@ -36,8 +37,7 @@ public class RayTracingManager : MonoBehaviour
     RenderTexture accumA; // write target
     RenderTexture accumB; // read source
 
-    private bool wasStopUploading = false;
-    private int savedFrameIndex = 0;
+    bool renderThisFrame = true; // false while paused (unless stepping): OnRenderImage just re-shows the last accumulation
     int lastSceneHash;    // everything that affects the image; accumulation resets when it changes
     int lastGeometryHash; // meshes + transforms + materials; triangles are rebuilt only when it changes
     Light cachedSun;      // directional light found when no sun is assigned
@@ -97,28 +97,32 @@ public class RayTracingManager : MonoBehaviour
     // Update is called once per frame
     void Update()
     {
-        if (Application.isPlaying || updateInEditMode)
+        if (!(Application.isPlaying || updateInEditMode))
+        {
+            frameIndex = 0;
+            return;
+        }
+
+        // Controls: Space pause/resume, Right arrow single step while paused, R restart accumulation
+        bool stepOnce = false;
+        Keyboard kb = Application.isPlaying ? Keyboard.current : null;
+        if (kb != null)
+        {
+            if (kb.spaceKey.wasPressedThisFrame) paused = !paused;
+            if (kb.rKey.wasPressedThisFrame) { frameIndex = 0; stepOnce = true; }
+            stepOnce |= paused && kb.rightArrowKey.wasPressedThisFrame;
+        }
+
+        renderThisFrame = !paused || stepOnce;
+        if (renderThisFrame)
         {
             if (Accumulate) { frameIndex++; } else { frameIndex = Time.frameCount; }
         }
-        else
-        {
-            frameIndex = 0;
-        }
+    }
 
-        // Save frameIndex when pausing
-        if (!wasStopUploading && stopUploading)
-        {
-            savedFrameIndex = frameIndex;
-        }
-
-        // Restore frameIndex when resuming
-        if (wasStopUploading && !stopUploading)
-        {
-            frameIndex = savedFrameIndex;
-            // Do NOT release accumA/accumB here, so accumulation continues smoothly
-        }
-        wasStopUploading = stopUploading;
+    void OnGUI()
+    {
+        if (paused) GUI.Label(new Rect(10, 10, 400, 20), $"PAUSED  frame {frameIndex}  (Space: run, Right arrow: step, R: restart)");
     }
 
     // Called after each camera (e.g. game or scene camera) has finished rendering into the src texture
@@ -130,14 +134,12 @@ public class RayTracingManager : MonoBehaviour
 
         if (!isSceneView || useShaderInSceneView)
         {
-            // --- ADD THIS BLOCK ---
-            if (stopUploading && accumB != null)
+            if (!renderThisFrame && accumB != null)
             {
-                // Just show the last accumulated image, do not update or render anything new
+                // Paused: just show the last accumulated image
                 Graphics.Blit(accumB, target);
                 return;
             }
-            // --- END BLOCK ---
 
             ShaderHelper.InitMaterial(rayTracingShader, ref rayTracingMaterial);
             if (rayTracingMaterial == null)
