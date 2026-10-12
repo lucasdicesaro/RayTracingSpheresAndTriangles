@@ -28,6 +28,14 @@ This project uses Unity's **Built-in renderer** — URP is intentionally disable
 
 No manual setup needed — scene, parameters, and project settings are all committed.
 
+## Controls (Play mode)
+
+| Key | Action |
+|-----|--------|
+| **Space** | Pause / resume accumulation (the last image stays on screen) |
+| **Right arrow** | Trace one more frame while paused |
+| **R** | Restart accumulation from scratch |
+
 ## References
 
 - [Sebastian Lague — Coding Adventure: Ray Tracing](https://www.youtube.com/watch?v=Qz0KTGYJjUs)
